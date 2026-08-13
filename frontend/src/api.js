@@ -31,8 +31,27 @@ export const getTasks = (params = {}) => {
   return request(`/tasks${query}`);
 };
 
+export const createTask = (data) =>
+  request('/tasks', { method: 'POST', body: JSON.stringify(data) });
+
 export const updateTask = (id, data) =>
   request(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+// ── Documents ─────────────────────────────────────────────────────────────────
+export const getTaskDocuments = (taskId) =>
+  request(`/tasks/${taskId}/documents`);
+
+export const updateDocument = (docId, isReceived) =>
+  request(`/documents/${docId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ is_received: isReceived }),
+  });
+
+export const createDocument = (taskId, documentName) =>
+  request(`/tasks/${taskId}/documents`, {
+    method: 'POST',
+    body: JSON.stringify({ document_name: documentName, is_received: false }),
+  });
 
 // ── Clients ───────────────────────────────────────────────────────────────────
 export const getClients = () => request('/clients?limit=200');

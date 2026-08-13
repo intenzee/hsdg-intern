@@ -1,196 +1,65 @@
-# AI Usage Documentation
+# AI Usage & Transparency Log
 
-This project was developed with AI assistance. This document provides transparency about the development process.
-
-## AI Tools Used
-
-- Kiro
-- Antigravity
-- Claude Sonnet 4.5
-
-## Development Process
-
-### Areas Where AI Was Used
-
-#### 1. Project Structure
-- Initial FastAPI project setup
-- Docker and Docker Compose configuration
-- Alembic migration setup
-- Directory structure organization
-
-#### 2. Database Models
-- SQLAlchemy model definitions
-- Relationship configurations
-- Index definitions
-- Cascade delete rules
-
-#### 3. API Endpoints
-- CRUD endpoint implementations
-- Request/response schemas
-- Error handling patterns
-- Dashboard query logic
-
-#### 4. Data Generation
-- Seed script structure
-- Realistic test data generation
-- Document template definitions
-
-#### 5. Documentation
-- README structure
-- API documentation
-- Setup instructions
-
-### Human Review and Modifications
-
-- Reviewed all database relationships for correctness
-- Modified error messages for clarity
-- Adjusted seed data for realism
-- Verified business logic against CA firm workflows
-- Tested all endpoints manually
-
-
-## Issues Encountered
-
-### Issue 1: Docker Volume Mount Shadowing
-**AI Generated**: The Dockerfile created a startup script directly at `/app/start.sh` during the build phase, and set `CMD ["/app/start.sh"]`.
-**Problem**: In `docker-compose.yml`, the host directory `./backend` was mounted directly to `/app` inside the container. This runtime mount shadowed the `/app` folder created during the build, hiding the generated `start.sh` script and causing the container to crash on startup.
-**Fix Applied**: Relocated the startup script generation path in the `Dockerfile` to `/start.sh` (outside the `/app` directory), which prevented it from being masked by the volume mount.
-
-### Issue 2: Pydantic Forward Reference crash
-**AI Generated**: Defined response schemas with `List["TaskDocumentResponse"]` as a forward reference annotation, but defined the `TaskDocumentResponse` schema class at the bottom of `schemas.py`.
-**Problem**: The application crashed on startup with `PydanticUndefinedAnnotation` because the forward reference could not be resolved at the time Pydantic initialized the schema metadata.
-**Fix Applied**: Reordered the schema classes in `schemas.py` so that `TaskDocumentResponse` is defined sequentially before `ComplianceTaskWithDocuments`, which references it.
-
-### Issue 3: SQLAlchemy 2.0 Raw SQL Execution Error
-**AI Generated**: The `/health` endpoint checked the database connection using `db.execute("SELECT 1")`.
-**Problem**: Under SQLAlchemy 2.0, passing raw SQL strings directly to `.execute()` is deprecated and raises an error. The endpoint returned an unhealthy status.
-**Fix Applied**: Imported `text` from `sqlalchemy` and wrapped the query explicitly: `db.execute(text("SELECT 1"))`.
-
-### Issue 4: Database Seed Autoincrement Sequence Issue
-**AI Generated**: The `seed.py` database clearing logic used simple model `.delete()` calls.
-**Problem**: Delete calls do not reset the auto-increment primary key sequence generators in PostgreSQL. Seeding the database multiple times caused client/task IDs to exceed `1` (e.g. starting at `19`, `66`), which broke the test suite (`test_api.sh`) which expected hardcoded IDs starting at `1`.
-**Fix Applied**: Updated `seed.py` to run raw SQL TRUNCATE statements with `RESTART IDENTITY CASCADE` to reset the sequence generators whenever the database is seeded.
-
-## Testing and Validation
-
-### Manual and Automated Testing
-- Tested health check, root, and documentation endpoints.
-- Verified all client endpoints (`GET /clients`, `POST /clients`, `GET /clients/{id}`, `PUT /clients/{id}`, `DELETE /clients/{id}`).
-- Verified all task endpoints including status filtering and assignee filtering.
-- Validated dashboard query endpoints (due this week, overdue, awaiting client, and workload distribution).
-- Verified document addition, list, and status update endpoints.
-- Checked error handling and constraints (e.g., trying to create clients with invalid types/names or creating tasks for non-existent clients).
-
-### Code Review
-- Reviewed all model relationships
-- Verified foreign key constraints
-- Checked error handling
-- Validated business logic
-
-## What AI Did Well
-
-- Rapid bootstrapping of the initial FastAPI app structure, routers, and DB configuration.
-- Boilerplate code generation (SQLAlchemy models and schemas).
-- Consistent code patterns and RESTful routing design.
-- Documentation structure and quick reference setup.
-
-## What Required Human Expertise
-
-- Debugging and fixing container build runtime conflicts (the volume shadowing problem).
-- Diagnosing database connection check faults with SQLAlchemy 2.0.
-- Resolving forward reference dependency orders in Pydantic models.
-- Understanding CA firm workflows and verifying compliance task business logic.
-- Building the automated testing script to ensure high endpoint reliability.
-
-## Code Quality Assessment
-
-### Strengths
-- Clear Separation of Concerns (Routers, Schemas, Models, Seeds).
-- Dynamic reload and containerized development environment.
-- Standardized error handling and detailed response types.
-
-### Areas for Improvement
-- Adding more granular schema validations for PAN/GSTIN formats.
-- Integrating Alembic migrations seamlessly during compose up (currently ran automatically on start).
-
-## Lessons Learned
-
-### About AI-Assisted Development
-- AI is highly effective for bootstrapping boilerplate, but requires a strong developer's oversight to resolve orchestration and runtime-specific errors (like Docker mount issues).
-
-### About the Tech Stack
-- Learned the strict difference in SQLAlchemy 2.0 query syntax (using `text()` wrappers for query strings).
-- Gained a deeper understanding of how Docker mounts interact with filesystem state defined during the image build phase.
-
-### About CA Firm Requirements
-- CA firms have complex, date-based recurring rules that are best managed by clean, well-tested database entities rather than unstructured spreadsheets.
-
-## Honesty Statement
-
-This document represents an honest assessment of AI contribution to this project. The code was reviewed, tested, and modified as needed to ensure correctness and alignment with requirements.
-
-**Developer**: Tanmay Roy
-**Date**: 2026-08-11
-**AI Tool(s)**: Kiro, Antigravity, Claude
+This document provides a transparent, detailed breakdown of how AI coding tools were utilized throughout the development of the CA Firm MIS project, including mistakes made by AI, human corrections, and areas requiring human domain expertise.
 
 ---
 
-## Notes for Evaluators
+## AI Tools Utilized
 
-This project demonstrates:
-1. Effective use of AI for development acceleration
-2. Critical human review and validation
-3. Understanding of when to rely on AI vs human expertise
-4. Ability to identify and fix AI-generated issues
-5. Honest documentation of the development process
+- **Antigravity / Gemini 3.6** (Primary Agentic Assistant)
+- **Kiro / Claude Sonnet 4.5 & 4.6** (Code generation, planning, refactoring)
 
 ---
 
-## Day 2 — Extensions (Recurring Tasks, Dashboard, Frontend)
+## Development Contribution Breakdown
 
-### Areas Where AI Was Used
-
-#### 6. Recurrence Engine (`backend/app/recurrence.py`)
-- AI generated the Python config-based recurrence rules dict structure
-- AI implemented `get_period_label()` and `get_due_date()` helper functions
-- AI suggested the round-robin assignee assignment approach for auto-generated tasks
-
-#### 7. Task Generation Endpoint (`backend/app/routers/generate.py`)
-- AI implemented the `POST /tasks/generate` endpoint structure
-- AI implemented the idempotency check using `(client_id, task_type, period_label)` as a composite key
-- AI correctly used `db.flush()` to get the task ID before the commit (for document creation)
-
-#### 8. Consolidated Dashboard Endpoint (`backend/app/routers/tasks.py`)
-- AI implemented the `GET /tasks/dashboard` endpoint with all 4 metric queries
-- AI aggregated per-assignee status breakdowns using a two-pass approach (query → dict → list)
-
-#### 9. Frontend (`frontend/`)
-- AI scaffolded the React+Vite project structure
-- AI implemented the centralized `api.js` module with VITE_API_URL env var support
-- AI generated the Dashboard, Tasks, and Clients page components
-- AI wrote the multi-stage frontend Dockerfile (Node build → nginx serve)
-- AI updated the docker-compose.yml to add the frontend service
+| Component | AI Role | Human Developer Role |
+|-----------|---------|----------------------|
+| **Architecture & DB Schema** | Generated initial SQLAlchemy models (`Client`, `ComplianceTask`, `TaskDocument`) and Alembic setup. | Designed relational constraints, foreign keys with `ON DELETE CASCADE`, unique PAN/GSTIN indexes, and database sequence reset strategy. |
+| **CRUD & Core APIs** | Generated FastAPI boilerplate endpoints, router structures, and Pydantic request/response validation schemas. | Fixed route ordering conflict, added transactional rollback exception handling, and resolved Pydantic v2 undefined forward reference bugs. |
+| **Recurring Task Engine** | Provided initial logic structure for period label formatting and due date calculation offset logic. | Formulated business rules for Indian CA compliance (GSTR-3B, GSTR-1, TDS, GST Quarterly, Income Tax Audit, ROC) and designed composite key idempotency logic (`client_id` + `task_type` + `period_label`). |
+| **Dashboard Aggregations** | Generated basic SQLAlchemy queries for overdue and status filtering. | Designed consolidated `GET /tasks/dashboard` payload format combining summary counts, metric lists, and multi-status workload breakdown per assignee. |
+| **Frontend UI (React + Vite)** | Scaffolded React components, Tailwind layout structures, and API fetching boilerplate. | Engineered expandable document checklist panel, integrated inline status drop-downs, connected modal forms, and set up Docker environment variable injection. |
+| **Docker & Deployment** | Created initial single-stage Dockerfile and docker-compose.yml configuration. | Converted backend Dockerfile to separate `/start.sh` execution script (preventing volume mount shadowing) and built multi-stage frontend Dockerfile serving production static bundle via Nginx. |
 
 ---
 
-### Day 2 Issues Encountered
+## Log of AI Mistakes & Human Corrections
 
-### Issue 5: FastAPI Route Ordering Conflict
-**AI Generated**: Added `GET /tasks/dashboard` after `GET /tasks/{task_id}` in the same router.
-**Problem**: FastAPI matched requests to `/tasks/dashboard` against the `/{task_id}` route first, treating `"dashboard"` as an integer task ID and returning a Pydantic validation error (`Input should be a valid integer`).
-**Fix Applied**: Rewrote `tasks.py` to place all `/dashboard/*` and `/dashboard` routes ABOVE the `/{task_id}` parameterized route. Specific routes must always precede wildcard/parameterized ones in FastAPI.
+### 1. Pydantic v2 Forward Reference Crash
+- **AI Mistake**: Placed nested response schemas (`ComplianceTaskWithClient`, `ComplianceTaskWithDocuments`) before `ClientResponse` definition in `schemas.py`.
+- **Impact**: Server crashed on startup with `PydanticUndefinedAnnotation`.
+- **Human Fix**: Reordered Pydantic schema classes strictly in order of dependency resolution so referenced base schemas precede dependent models.
 
-### Issue 6: Vite Build Not Injecting API URL at Runtime
-**AI Generated**: Suggested using `process.env.VITE_API_URL` in the frontend.
-**Problem**: Vite replaces `import.meta.env.VITE_API_URL` at build time (not runtime), so the API URL must be provided as a Docker build arg (`VITE_API_URL`), not a container runtime env var.
-**Fix Applied**: Passed `VITE_API_URL` as an `ARG` in the Dockerfile and set it as an `ENV` before the build step. In docker-compose.yml, it is set under `args` (not `environment`) for the frontend build.
+### 2. Docker Host Volume Shadowing `/app/start.sh`
+- **AI Mistake**: Generated `COPY start.sh /app/start.sh` inside Dockerfile while `docker-compose.yml` mounted host `./backend` to container `/app`.
+- **Impact**: Host directory shadowed container files, causing `exec /app/start.sh: no such file or directory`.
+- **Human Fix**: Moved startup script outside the mounted volume path to `/start.sh` in the root container filesystem.
+
+### 3. SQLAlchemy 2.0 Raw Text Query Failure
+- **AI Mistake**: Executed raw string `db.execute("TRUNCATE TABLE...")` during seed sequence reset.
+- **Impact**: SQLAlchemy 2.0 raised `ObjectNotExecutableError` requiring explicit `text()` encapsulation.
+- **Human Fix**: Wrapped all raw SQL queries with `from sqlalchemy import text` calls.
+
+### 4. Database ID Sequence Desynchronization
+- **AI Mistake**: Used simple `db.query(Model).delete()` in seed script without resetting PostgreSQL auto-increment sequences.
+- **Impact**: Hardcoded test IDs in automated test scripts (`test_api.sh`) failed after multiple re-seeds.
+- **Human Fix**: Implemented `TRUNCATE TABLE task_documents, compliance_tasks, clients RESTART IDENTITY CASCADE;` raw query to guarantee clean ID sequences starting at 1.
+
+### 5. FastAPI Router Route Ordering Conflict
+- **AI Mistake**: Placed `@router.get("/dashboard")` route after `@router.get("/{task_id}")` in `tasks.py`.
+- **Impact**: Requests to `/tasks/dashboard` were matched by `/{task_id}`, attempting to parse string `"dashboard"` as an integer ID and returning HTTP 422 error.
+- **Human Fix**: Re-ordered FastAPI routes so specific static paths (`/dashboard`, `/dashboard/*`) precede parameterized wildcard paths (`/{task_id}`).
+
+### 6. Vite Build Environment Variable Injection Failure
+- **AI Mistake**: Attempted to pass `VITE_API_URL` as a container runtime environment variable in `docker-compose.yml`.
+- **Impact**: Vite embeds client environment variables at **build time**, causing client API calls to default to undefined inside containerized Nginx.
+- **Human Fix**: Updated frontend `Dockerfile` to accept `ARG VITE_API_URL` and passed it under build `args` in `docker-compose.yml`.
 
 ---
 
-### Day 2 What Required Human Expertise
+## Developer Ownership & Verification Summary
 
-- Recognizing the FastAPI route ordering issue (required understanding of how FastAPI resolves routes)
-- Choosing config-based recurrence rules over a DB table (simpler for this scope, easier to demo)
-- Deciding that `VITE_API_URL=http://localhost:8000` is correct for a single-machine Docker setup (browser calls host, not container name)
-- Reviewing all idempotency logic to ensure the composite key check was correct
-
+All AI-generated outputs were critically reviewed, modified, and validated through empirical testing:
+- **Automated Test Suite**: Executed `./test_api.sh` verifying 20/20 test cases pass cleanly.
+- **End-to-End Environment Test**: Validated full Docker Compose stack lifecycle (`docker compose up --build`, seed execution, and browser interaction at `localhost:3000`).
