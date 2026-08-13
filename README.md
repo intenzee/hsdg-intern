@@ -1,6 +1,6 @@
-# CA Firm MIS Backend
+# CA Firm MIS — Full Stack
 
-Backend API for CA firm compliance tracking and management.
+Backend API + React frontend for CA firm compliance tracking and management.
 
 ## Tech Stack
 
@@ -9,56 +9,120 @@ Backend API for CA firm compliance tracking and management.
 - **Database**: PostgreSQL 16
 - **Migrations**: Alembic 1.13.1
 - **Validation**: Pydantic v2
+- **Frontend**: React + Vite + Tailwind CSS
 - **Container**: Docker + Docker Compose
 
 ## Prerequisites
 
-- Docker Desktop
+- Docker Desktop (running)
 - Docker Compose v2+
 
-## Setup
+## Quick Start
 
 ```bash
 git clone <repository-url>
 cd ca-firm-mis-backend
+
+# Start all 3 services: database, backend API, and frontend
 docker compose up --build
-```
 
-Database will auto-migrate on startup. Seed data can be loaded via:
-
-```bash
+# In a separate terminal — seed the database
 curl -X POST http://localhost:8000/seed
 ```
 
-## API Documentation
+## Access Points
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **Health Check**: http://localhost:8000/health
+| Service | URL |
+|---------|-----|
+| **Frontend** | http://localhost:3000 |
+| API Root | http://localhost:8000 |
+| Swagger UI | http://localhost:8000/docs |
+| ReDoc | http://localhost:8000/redoc |
+| Health Check | http://localhost:8000/health |
+| PostgreSQL | localhost:5432 (user: postgres, pass: postgres, db: ca_firm_mis) |
 
-## Features
+---
 
-### Client Management
-- Create, read, update, delete clients
-- Track entity type, PAN, GSTIN, contact details, partner in charge
-- Unique constraints on PAN and GSTIN
+## Frontend Features
 
-### Compliance Task Management
-- Full CRUD for compliance tasks
-- Task types: GSTR-3B, GSTR-1, TDS, GST Quarterly, Income Tax Audit, ROC Filing
-- Status tracking: Not Started, In Progress, Awaiting Client, Filed
-- Multi-criteria filtering: client, assignee, status, type, date range
+Open **http://localhost:3000** in your browser after running `docker compose up --build`.
 
-### Document Checklists
-- Per-task document tracking
-- Mark documents as received or pending
-- Document templates per task type
+### Dashboard Page
+- **Summary cards**: Due This Week, Overdue, Awaiting Client, Total Open
+- **Workload table**: Per-assignee task count broken down by status (Not Started / In Progress / Awaiting Client / Filed)
+- **Task lists**: Collapsible sections for Overdue, Due This Week, and Awaiting Client tasks
+- **Generate panel**: Trigger recurring task generation for any month/year directly from the UI
 
-### Dashboard Views
-- **Due This Week**: Tasks with due dates in next 7 days
-- **Overdue**: Past due tasks not yet filed
-- **Awaiting Client**: Tasks blocked on client input
-- **Workload**: Task counts per assignee
+### Tasks Page
+- Full task list with **6 filters**: Client, Status, Task Type, Assignee, Due From, Due To
+- **Inline status updates**: Change any task's status via a dropdown — saves immediately
+- Supports large task counts with pagination via `skip`/`limit` query params
+
+### Clients Page
+- Paginated client list (name, entity type, PAN, partner, contact)
+- **Add client**: Click "+ Add Client" for a form modal
+- **Edit client**: Click Edit on any row to modify all fields
+- **Delete client**: Cascades to all their tasks and documents
+
+---
+
+## Recurring Task Generation
+
+### Endpoint
+```
+POST /tasks/generate
+Content-Type: application/json
+
+{ "year": 2026, "month": 8 }
+```
+
+### Example
+```bash
+# Generate tasks for August 2026
+curl -X POST http://localhost:8000/tasks/generate \
+  -H "Content-Type: application/json" \
+  -d '{"year": 2026, "month": 8}'
+
+# Response
+{
+  "period": "August 2026",
+  "tasks_created": 54,
+  "tasks_skipped": 0,
+  "documents_created": 198
+}
+```
+
+Running the endpoint again for the same period is **idempotent** — existing tasks are detected by `(client_id, task_type, period_label)` and skipped.
+
+### Recurrence Rules
+
+| Task Type | Frequency | Due Date | Notes |
+|-----------|-----------|----------|-------|
+| GSTR-3B | Monthly | 20th of next month | All clients |
+| GSTR-1 | Monthly | 11th of next month | All clients |
+| TDS | Monthly | 7th of next month | All clients |
+| GST Quarterly | Quarterly | 30th of month after quarter end | Quarter end months: Mar, Jun, Sep, Dec |
+| Income Tax Audit | Annual | 30 September | Triggers in September |
+| ROC Annual Filing | Annual | 30 November | Triggers in November |
+
+Rules are defined in `backend/app/recurrence.py` as a Python config dict — easy to extend without DB changes.
+
+---
+
+## Dashboard Endpoint
+
+```
+GET /tasks/dashboard
+```
+
+Returns a single JSON response with:
+- `summary`: counts for `due_this_week_count`, `overdue_count`, `awaiting_client_count`, `total_open_tasks`
+- `due_this_week`: tasks due in next 7 days (non-Filed)
+- `overdue`: tasks past due date and not Filed
+- `awaiting_client`: tasks with status "Awaiting Client"
+- `workload_per_assignee`: per-assignee breakdown by status
+
+---
 
 ## API Endpoints
 
@@ -78,14 +142,16 @@ GET    /tasks             List/filter tasks
 GET    /tasks/{id}        Get task with documents
 PUT    /tasks/{id}        Update task
 DELETE /tasks/{id}        Delete task (cascades to documents)
+POST   /tasks/generate    Generate recurring tasks for a period
+GET    /tasks/dashboard   Consolidated dashboard metrics
 ```
 
-### Dashboards
+### Legacy Dashboard Endpoints (still available)
 ```
-GET /tasks/dashboard/due-this-week      Tasks due in next 7 days
-GET /tasks/dashboard/overdue             Past due, not filed
-GET /tasks/dashboard/awaiting-client     Tasks awaiting client
-GET /tasks/dashboard/workload            Task counts per assignee
+GET /tasks/dashboard/due-this-week
+GET /tasks/dashboard/overdue
+GET /tasks/dashboard/awaiting-client
+GET /tasks/dashboard/workload
 ```
 
 ### Documents
@@ -96,57 +162,7 @@ PATCH  /documents/{id}               Update received status
 DELETE /documents/{id}               Delete document
 ```
 
-## Data Model
-
-```
-clients (PK: id)
-├── name, entity_type, pan, gstin
-├── contact_name, contact_email, contact_phone
-├── partner_in_charge
-└── timestamps
-
-compliance_tasks (PK: id, FK: client_id)
-├── task_type, period_label
-├── due_date, assignee, status
-└── timestamps
-
-task_documents (PK: id, FK: task_id)
-├── document_name
-├── is_received
-└── timestamp
-```
-
-**Relationships**:
-- Client → Tasks (one-to-many, CASCADE DELETE)
-- Task → Documents (one-to-many, CASCADE DELETE)
-
-**Indexes**: Primary keys, foreign keys, pan, gstin, task_type, due_date, assignee, status
-
-## Example Usage
-
-```bash
-# List all clients
-curl http://localhost:8000/clients
-
-# Filter tasks by status
-curl "http://localhost:8000/tasks?status=Awaiting%20Client"
-
-# Get overdue tasks
-curl http://localhost:8000/tasks/dashboard/overdue
-
-# Get workload distribution
-curl http://localhost:8000/tasks/dashboard/workload
-
-# Create client
-curl -X POST http://localhost:8000/clients \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Test Company Ltd",
-    "entity_type": "Company",
-    "pan": "TESTC1234T",
-    "partner_in_charge": "Rajesh Kumar"
-  }'
-```
+---
 
 ## Development
 
@@ -160,6 +176,7 @@ curl -X POST http://localhost:8000/seed
 ### View Logs
 ```bash
 docker compose logs -f api
+docker compose logs -f frontend
 docker compose logs -f db
 ```
 
@@ -168,13 +185,24 @@ docker compose logs -f db
 docker exec -it ca_firm_mis_db psql -U postgres -d ca_firm_mis
 ```
 
+### Run API Tests
+```bash
+# Re-seed first (resets ID sequences), then run tests
+curl -X POST http://localhost:8000/seed
+./test_api.sh
+```
+
+---
+
 ## Seed Data
 
 The seed script creates:
 - 18 clients across 5 entity types
 - 65 compliance tasks across 6 task types
-- 150+ document items (2-5 per task)
+- 200+ document items (2-5 per task)
 - Realistic distribution of statuses and assignees
+
+---
 
 ## Project Structure
 
@@ -186,36 +214,44 @@ backend/
 │   ├── database.py          DB connection
 │   ├── models.py            SQLAlchemy models
 │   ├── schemas.py           Pydantic schemas
+│   ├── recurrence.py        Recurrence rules config + helpers (Day 2)
 │   ├── seed.py              Data seeding
 │   └── routers/
 │       ├── clients.py       Client endpoints
-│       ├── tasks.py         Task endpoints + dashboards
+│       ├── tasks.py         Task endpoints + dashboard
+│       ├── generate.py      Recurring task generation (Day 2)
 │       └── documents.py     Document endpoints
 ├── alembic/                 Database migrations
-├── Dockerfile               Container definition
-└── requirements.txt         Python dependencies
+├── Dockerfile
+└── requirements.txt
+
+frontend/
+├── src/
+│   ├── api.js               Centralized API calls
+│   ├── App.jsx              Root component + tab routing
+│   ├── main.jsx             React entry point
+│   ├── index.css            Tailwind CSS import
+│   ├── components/
+│   │   └── Navbar.jsx       Top navigation bar
+│   └── pages/
+│       ├── Dashboard.jsx    Dashboard page
+│       ├── Tasks.jsx        Tasks list + filters
+│       └── Clients.jsx      Clients list + add/edit
+├── Dockerfile               Multi-stage: Node build → nginx serve
+└── package.json
 ```
+
+---
 
 ## Assumptions
 
-- No authentication/authorization (internal use)
-- No billing module
-- No government portal integration
-- Recurring task rules encoded as constants (can be moved to DB)
-- Single-tenant architecture
-- CORS allows all origins (adjust for production)
+1. **Recurrence rules are config-based** (not stored in DB): simpler, more predictable, easy to extend by editing `recurrence.py`.
+2. **GSTR-1 is treated as monthly** for all clients (same as GSTR-3B). In practice, some clients may file quarterly — this can be extended by adding a `filing_frequency` field to the `clients` table.
+3. **Assignees are auto-assigned** using deterministic round-robin based on `(client_id, task_type)`. This spreads workload evenly without requiring manual assignment at generation time.
+4. **The frontend API URL** is embedded at build time via `VITE_API_URL` build arg (defaults to `http://localhost:8000`). The browser makes API calls directly to the backend — this works correctly on a single developer machine.
+5. **No authentication**: internal tool only.
 
-## Future Enhancements
-
-- Automated recurring task generation (scheduled jobs)
-- Email/Slack notifications for due dates
-- Document file upload and storage
-- Audit trail for task changes
-- Role-based access control
-- Task assignment workflow
-- Client portal for document submission
-- Reporting and analytics
-- Government portal API integration
+---
 
 ## License
 

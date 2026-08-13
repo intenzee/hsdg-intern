@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
-from app.routers import clients, tasks, documents
+from app.routers import clients, tasks, documents, generate
 from app.schemas import SeedResponse
 from app.seed import seed_database
 
@@ -28,6 +29,7 @@ app.add_middleware(
 app.include_router(clients.router)
 app.include_router(tasks.router)
 app.include_router(documents.router)
+app.include_router(generate.router)
 
 
 @app.get("/", tags=["Root"])
@@ -40,12 +42,8 @@ def root():
             "clients": "/clients",
             "tasks": "/tasks",
             "documents": "/tasks/{task_id}/documents",
-            "dashboard": {
-                "due_this_week": "/tasks/dashboard/due-this-week",
-                "overdue": "/tasks/dashboard/overdue",
-                "awaiting_client": "/tasks/dashboard/awaiting-client",
-                "workload": "/tasks/dashboard/workload"
-            }
+            "dashboard": "/tasks/dashboard",
+            "generate_tasks": "/tasks/generate",
         }
     }
 
@@ -53,7 +51,7 @@ def root():
 @app.get("/health", tags=["Health"])
 def health_check(db: Session = Depends(get_db)):
     try:
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         return {"status": "unhealthy", "database": "disconnected", "error": str(e)}

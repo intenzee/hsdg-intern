@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from random import choice, randint, sample
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine
 from app.models import Base, Client, ComplianceTask, TaskDocument
@@ -189,10 +190,8 @@ def seed_database():
     db = SessionLocal()
     
     try:
-        print("Clearing existing data...")
-        db.query(TaskDocument).delete()
-        db.query(ComplianceTask).delete()
-        db.query(Client).delete()
+        print("Clearing existing data and restarting sequences...")
+        db.execute(text("TRUNCATE TABLE task_documents, compliance_tasks, clients RESTART IDENTITY CASCADE;"))
         db.commit()
         
         print("Creating 15+ clients...")

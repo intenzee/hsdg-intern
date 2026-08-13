@@ -26,8 +26,8 @@ echo "Database is ready!"\n\
 echo "Running migrations..."\n\
 alembic upgrade head\n\
 echo "Starting application..."\n\
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload' > /app/start.sh
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload' > /start.sh
 
-RUN chmod +x /app/start.sh
+RUN chmod +x /start.sh
 
-CMD ["/app/start.sh"]
+CMD ["/start.sh"]
